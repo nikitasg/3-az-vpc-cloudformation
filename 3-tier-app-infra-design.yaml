@@ -1,0 +1,418 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: '3 Tier VPC'
+
+Parameters:
+
+
+  ApplicationName:
+    Description: 'Enter your app name:'
+    Type: String
+    MaxLength: '50'
+    MinLength: '3'
+    ConstraintDescription: Please input your app name.
+
+Resources:
+
+
+    myVPC:
+      Type: AWS::EC2::VPC
+      Properties:
+        CidrBlock: 10.0.0.0/16
+        InstanceTenancy: default
+        EnableDnsSupport: true
+        EnableDnsHostnames: true
+        Tags:
+          - Key: environment
+            Value: my3tier-vpc
+          - Key: Name
+            Value: !Join ['-', [myVPC, !Ref 'ApplicationName']]
+
+    PublicSubnetA:
+      Type: AWS::EC2::Subnet
+      Properties:
+        CidrBlock: 10.0.0.0/24
+        AvailabilityZone:
+          Fn::Select:
+            - 0
+            - Fn::GetAZs: !Ref AWS::Region
+        MapPublicIpOnLaunch: true
+        VpcId: !Ref 'myVPC'
+        Tags:
+          - Key: environment
+            Value: my3tier-vpc
+          - Key: Name
+            Value: !Join ['-', [PublicSubnetA, !Ref 'ApplicationName']]
+
+    PublicSubnetB:
+      Type: AWS::EC2::Subnet
+      Properties:
+        CidrBlock: 10.0.1.0/24
+        AvailabilityZone:
+          Fn::Select:
+            - 1
+            - Fn::GetAZs: !Ref AWS::Region
+        MapPublicIpOnLaunch: true
+        VpcId: !Ref 'myVPC'
+        Tags:
+          - Key: environment
+            Value: my3tier-vpc
+          - Key: Name
+            Value: !Join ['-', [PublicSubnetB, !Ref 'ApplicationName']]
+
+    PublicSubnetC:
+      Type: AWS::EC2::Subnet
+      Properties:
+        CidrBlock: 10.0.2.0/24
+        AvailabilityZone:
+          Fn::Select:
+            - 2
+            - Fn::GetAZs: !Ref AWS::Region
+        MapPublicIpOnLaunch: true
+        VpcId: !Ref 'myVPC'
+        Tags:
+          - Key: environment
+            Value: my3tier-vpc
+          - Key: Name
+            Value: !Join ['-', [PublicSubnetB, !Ref 'ApplicationName']]
+
+    PrivateSubnetA:
+      Type: AWS::EC2::Subnet
+      Properties:
+        CidrBlock: 10.0.3.0/24
+        AvailabilityZone:
+          Fn::Select:
+            - 0
+            - Fn::GetAZs: !Ref AWS::Region
+        VpcId: !Ref 'myVPC'
+        Tags:
+          - Key: environment
+            Value: my3tier-vpc
+          - Key: Name
+            Value: !Join ['-', [PrivateSubnetA, !Ref 'ApplicationName']]
+
+    PrivateSubnetB:
+      Type: AWS::EC2::Subnet
+      Properties:
+        CidrBlock: 10.0.4.0/24
+        AvailabilityZone:
+          Fn::Select:
+            - 1
+            - Fn::GetAZs: !Ref AWS::Region
+        VpcId: !Ref 'myVPC'
+        Tags:
+          - Key: environment
+            Value: my3tier-vpc
+          - Key: Name
+            Value: !Join ['-', [PrivateSubnetB, !Ref 'ApplicationName']]
+
+    PrivateSubnetC:
+      Type: AWS::EC2::Subnet
+      Properties:
+        CidrBlock: 10.0.5.0/24
+        AvailabilityZone:
+          Fn::Select:
+            - 2
+            - Fn::GetAZs: !Ref AWS::Region
+        VpcId: !Ref 'myVPC'
+        Tags:
+          - Key: environment
+            Value: my3tier-vpc
+          - Key: Name
+            Value: !Join ['-', [PrivateSubnetB, !Ref 'ApplicationName']]
+
+    myIGW:
+      Type: AWS::EC2::InternetGateway
+      Properties:
+        Tags:
+          - Key: environment
+            Value: my3tier-vpc
+          - Key: Name
+            Value: !Join ['-', [IGW, !Ref 'ApplicationName']]
+
+    myNetworkACL:
+      Type: AWS::EC2::NetworkAcl
+      Properties:
+        VpcId: !Ref 'myVPC'
+        Tags:
+          - Key: environment
+            Value: my3tier-vpc
+          - Key: Name
+            Value: !Join ['-', [NACL, !Ref 'ApplicationName']]
+
+    myRoutePublic:
+      Type: AWS::EC2::RouteTable
+      Properties:
+        VpcId: !Ref 'myVPC'
+        Tags:
+          - Key: environment
+            Value: my3tier-vpc
+          - Key: Name
+            Value: !Join ['-', [PublicRoute, !Ref 'ApplicationName']]
+
+    myRoutePrivate:
+      Type: AWS::EC2::RouteTable
+      Properties:
+        VpcId: !Ref 'myVPC'
+        Tags:
+          - Key: environment
+            Value: my3tier-vpc
+          - Key: Name
+            Value: !Join ['-', [PrivateRoute, !Ref 'ApplicationName']]
+
+    myLT:
+      Type: AWS::EC2::LaunchTemplate
+      Properties:
+        LaunchTemplateName: myLT
+        LaunchTemplateData:
+          DimybleApiTermination: true
+          ImageId: ami-012345678790
+          UserData:
+          InstanceType: t2.micro
+          SecurityGroupIds: 
+            - Ref: mySGapp
+
+    myASG:
+      Type: AWS::AutoScaling::AutoScalingGroup
+      Properties:
+        VPCZoneIdentifier:
+           - !Ref PrivateSubnetA
+           - !Ref PrivateSubnetB
+           - !Ref PrivateSubnetC
+        LaunchTemplate:
+          LaunchTemplateId: !Ref myLT
+          Version: !GetAtt myLT.LatestVersionNumber
+        MaxSize: '3'
+        MinSize: '2'
+        TargetGroupARNs:
+          - !Ref myALBTG
+
+    myelb:
+      Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+      Properties:
+        Name: myelb
+        Scheme: internet-facing
+        Subnets: 
+          - !Ref PublicSubnetA
+          - !Ref PublicSubnetB
+          - !Ref PrivateSubnetC
+        SecurityGroups: [!Ref 'mySGELB']
+        Type: application
+        Tags:
+          - Key: environment
+            Value: my3tier-vpc
+          - Key: Name
+            Value: !Join ['-', [ELB, !Ref 'ApplicationName']]
+
+    ALBHTTPListener:
+      Type: AWS::ElasticLoadBalancingV2::Listener
+      Properties:
+        DefaultActions:
+          - Type: "redirect"
+            RedirectConfig:
+              Protocol: "HTTPS"
+              Port: 443
+              Host: "#{host}"
+              Path: "/#{path}"
+              Query: "#{query}"
+              StatusCode: "HTTP_301"
+        LoadBalancerArn: !Ref myelb
+        Port: 80
+        Protocol: HTTP
+
+    ALBHTTPSListener:
+      Type: AWS::ElasticLoadBalancingV2::Listener
+      Properties:
+        DefaultActions:
+          - Type: forward
+            TargetGroupArn: !Ref myALBTG
+        LoadBalancerArn: !Ref myelb
+        Port: 443
+        Protocol: HTTPS
+        Certificates:
+        - CertificateArn: arn:aws:acm:eu-west-1:123456789012:certificate/12345678-1234-1234-1234-123456789012 #Replace this with your certficate ARN
+        SslPolicy: ELBSecurityPolicy-TLS-1-2-2017-01
+    
+    myALBTG:
+      Type: AWS::ElasticLoadBalancingV2::TargetGroup
+      Properties:
+        HealthCheckIntervalSeconds: 30
+        HealthCheckPath: /index.html
+        HealthCheckProtocol: HTTP
+        HealthCheckPort: traffic-port
+        HealthCheckTimeoutSeconds: 5
+        HealthyThresholdCount: 2
+        Matcher:
+          HttpCode: '200'
+        Name: myInstances
+        Port: 80
+        Protocol: HTTP
+        VpcId: !Ref 'myVPC'
+        Tags:
+          - Key: Name 
+            Value: myALB-TG
+
+    mySGELB:
+      Type: AWS::EC2::SecurityGroup
+      Properties:
+        GroupDescription: myapp - ELB security group
+        VpcId: !Ref 'myVPC'
+        SecurityGroupIngress:
+          - IpProtocol: tcp
+            ToPort: 80
+            FromPort: 80
+            CidrIp: 0.0.0.0/0
+          - IpProtocol: tcp
+            ToPort: 80
+            FromPort: 443
+            CidrIp: 0.0.0.0/0
+        Tags:
+          - Key: environment
+            Value: my3tier-vpc
+          - Key: Name
+            Value: ELBSecurityGroup
+
+    mySGapp:
+      Type: AWS::EC2::SecurityGroup
+      Properties:
+        GroupDescription: myapp - App server security group
+        VpcId: !Ref 'myVPC'
+        SecurityGroupIngress:
+          - IpProtocol: tcp
+            ToPort: 80
+            FromPort: 80
+            SourceSecurityGroupId: !Ref 'mySGELB'
+        Tags:
+          - Key: environment
+            Value: my3tier-vpc
+          - Key: Name
+            Value: AppServerSecurityGroup
+
+    myNACLEntry1:
+      Type: AWS::EC2::NetworkAclEntry
+      Properties:
+        CidrBlock: 0.0.0.0/0
+        Egress: true
+        Protocol: -1
+        RuleAction: allow
+        RuleNumber: 100
+        NetworkAclId: !Ref 'myNetworkACL'
+
+    myNACLEntry2:
+      Type: AWS::EC2::NetworkAclEntry
+      Properties:
+        CidrBlock: 0.0.0.0/0
+        Protocol: -1
+        RuleAction: allow
+        RuleNumber: 100
+        NetworkAclId: !Ref 'myNetworkACL'
+
+    subnetacl1:
+      Type: AWS::EC2::SubnetNetworkAclAssociation
+      Properties:
+        NetworkAclId: !Ref 'myNetworkACL'
+        SubnetId: !Ref 'PublicSubnetA'
+
+    subnetacl2:
+      Type: AWS::EC2::SubnetNetworkAclAssociation
+      Properties:
+        NetworkAclId: !Ref 'myNetworkACL'
+        SubnetId: !Ref 'PublicSubnetB'
+
+    subnetacl3:
+      Type: AWS::EC2::SubnetNetworkAclAssociation
+      Properties:
+        NetworkAclId: !Ref 'myNetworkACL'
+        SubnetId: !Ref 'PublicSubnetC'
+
+    subnetacl4:
+      Type: AWS::EC2::SubnetNetworkAclAssociation
+      Properties:
+        NetworkAclId: !Ref 'myNetworkACL'
+        SubnetId: !Ref 'PrivateSubnetA'
+
+    subnetacl5:
+      Type: AWS::EC2::SubnetNetworkAclAssociation
+      Properties:
+        NetworkAclId: !Ref 'myNetworkACL'
+        SubnetId: !Ref 'PrivateSubnetB'
+
+    subnetacl6:
+      Type: AWS::EC2::SubnetNetworkAclAssociation
+      Properties:
+        NetworkAclId: !Ref 'myNetworkACL'
+        SubnetId: !Ref 'PrivateSubnetC'
+
+    myIGWAttachment:
+      Type: AWS::EC2::VPCGatewayAttachment
+      Properties:
+        VpcId: !Ref 'myVPC'
+        InternetGatewayId: !Ref 'myIGW'
+
+    subnetRoutePublicA:
+      Type: AWS::EC2::SubnetRouteTableAssociation
+      Properties:
+        RouteTableId: !Ref 'myRoutePublic'
+        SubnetId: !Ref 'PublicSubnetA'
+
+    subnetRoutePublicB:
+      Type: AWS::EC2::SubnetRouteTableAssociation
+      Properties:
+        RouteTableId: !Ref 'myRoutePublic'
+        SubnetId: !Ref 'PublicSubnetB'
+
+    subnetRoutePublicC:
+      Type: AWS::EC2::SubnetRouteTableAssociation
+      Properties:
+        RouteTableId: !Ref 'myRoutePublic'
+        SubnetId: !Ref 'PublicSubnetC'
+
+    subnetRoutePrivateA:
+      Type: AWS::EC2::SubnetRouteTableAssociation
+      Properties:
+        RouteTableId: !Ref 'myRoutePrivate'
+        SubnetId: !Ref 'PrivateSubnetA'
+
+    subnetRoutePrivateB:
+      Type: AWS::EC2::SubnetRouteTableAssociation
+      Properties:
+        RouteTableId: !Ref 'myRoutePrivate'
+        SubnetId: !Ref 'PrivateSubnetB'
+
+    subnetRoutePrivateC:
+      Type: AWS::EC2::SubnetRouteTableAssociation
+      Properties:
+        RouteTableId: !Ref 'myRoutePrivate'
+        SubnetId: !Ref 'PrivateSubnetC'
+
+    publicroute:
+      Type: AWS::EC2::Route
+      Properties:
+        DestinationCidrBlock: 0.0.0.0/0
+        RouteTableId: !Ref 'myRoutePublic'
+        GatewayId: !Ref 'myIGW'
+
+    privateroute:
+      Type: AWS::EC2::Route
+      Properties:
+        DestinationCidrBlock: 0.0.0.0/0
+        RouteTableId: !Ref 'myRoutePrivate'
+        NatGatewayId: !Ref 'NATGW'
+
+    NATEIP:
+      Type: AWS::EC2::EIP
+      Properties:
+        Domain: !Ref 'myVPC'
+
+    NATGW:
+      Type: AWS::EC2::NatGateway
+      Properties: 
+        AllocationId: !GetAtt NATEIP.AllocationId
+        SubnetId: !Ref 'PublicSubnetA'
+
+
+Outputs:
+
+
+  LoadBalancerDNSName:
+    Description: The DNS Name of the load balancer
+    Value: !GetAtt myelb.DNSName

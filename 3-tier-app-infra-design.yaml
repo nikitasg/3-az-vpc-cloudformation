@@ -73,7 +73,7 @@ Resources:
           - Key: environment
             Value: my3tier-vpc
           - Key: Name
-            Value: !Join ['-', [PublicSubnetB, !Ref 'ApplicationName']]
+            Value: !Join ['-', [PublicSubnetC, !Ref 'ApplicationName']]
 
     PrivateSubnetA:
       Type: AWS::EC2::Subnet
@@ -118,7 +118,7 @@ Resources:
           - Key: environment
             Value: my3tier-vpc
           - Key: Name
-            Value: !Join ['-', [PrivateSubnetB, !Ref 'ApplicationName']]
+            Value: !Join ['-', [PrivateSubnetC, !Ref 'ApplicationName']]
 
     myIGW:
       Type: AWS::EC2::InternetGateway
